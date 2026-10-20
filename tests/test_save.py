@@ -142,6 +142,62 @@ class SaveTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.save(images=torch.zeros(shape))
 
+    def test_prompt_text_same_name_and_exact_bytes_for_each_batch_image(self):
+        text = "  A café at sunset.\nNegative: blurry\n日本語 🖼️\r\n"
+        for fmt in ("PNG", "JPEG"):
+            result = self.save(images=self.images.repeat(2, 1, 1, 1), format=fmt,
+                               save_prompt=True, prompt_text=text)
+            for name in result["result"][0]:
+                path = Path(name)
+                self.assertEqual(path.with_suffix(".txt").read_bytes(), text.encode("utf-8"))
+                with Image.open(path) as image:
+                    image.load()
+                self.assertEqual(path.with_suffix(".json").exists(), fmt == "JPEG")
+
+    def test_prompt_default_off_and_explicit_export_without_metadata(self):
+        for kwargs in ({}, {"save_prompt": False, "prompt_text": "Do not export"}):
+            path = Path(self.save(**kwargs)["result"][0][0])
+            self.assertFalse(path.with_suffix(".txt").exists())
+        with patch.object(nodes.args, "disable_metadata", True):
+            path = Path(self.save(format="JPEG", save_metadata=False,
+                                 save_prompt=True, prompt_text="Explicit prompt")["result"][0][0])
+        self.assertFalse(path.with_suffix(".json").exists())
+        self.assertEqual(path.with_suffix(".txt").read_text(), "Explicit prompt")
+
+    def test_empty_prompt_rejected_before_writing(self):
+        for text in ("", " \n\t", None):
+            with self.assertRaisesRegex(ValueError, "prompt_text"):
+                self.save(save_prompt=True, prompt_text=text)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_concurrent_prompt_pairs_and_existing_text_are_preserved(self):
+        orphan = self.root / "ComfyUI_00001.txt"
+        orphan.write_text("Existing text")
+        def save_pair(index):
+            text = f"Prompt {index}"
+            path = Path(self.save(format="JPEG", save_prompt=True, prompt_text=text)["result"][0][0])
+            return path, text
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            pairs = list(pool.map(save_pair, range(12)))
+        self.assertEqual(len({path for path, _ in pairs}), 12)
+        for path, text in pairs:
+            self.assertEqual(path.with_suffix(".txt").read_text(), text)
+            self.assertTrue(path.is_file())
+            self.assertTrue(path.with_suffix(".json").is_file())
+        self.assertEqual(orphan.read_text(), "Existing text")
+
+    def test_failed_text_write_cleans_image_and_json(self):
+        original = saving.atomic_write
+        def fail_text(path, writer):
+            if path.suffix == ".txt":
+                raise OSError("Text write failed")
+            return original(path, writer)
+        for fmt in ("PNG", "JPEG"):
+            with patch.object(saving, "atomic_write", side_effect=fail_text):
+                with self.assertRaisesRegex(OSError, "Text write failed"):
+                    self.save(format=fmt, save_prompt=True, prompt_text="A portrait")
+            self.assertEqual(list(self.root.iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,8 @@ async page => {
             set(node, "format", format);
             set(node, "filename_prefix", `test_${format.toLowerCase()}`);
             set(node, "output_folder", "save-image-validation");
+            set(node, "save_prompt", true);
+            set(node, "prompt_text", "A café in soft natural light.\nDetailed textures.");
             source.connect(0, node, 0);
             assert(Boolean(node.widgets.find(w => w.name === "png_compression").hidden) === (format !== "PNG"), "PNG visibility");
             assert(Boolean(node.widgets.find(w => w.name === "jpeg_quality").hidden) === (format !== "JPEG"), "JPEG visibility");
@@ -39,6 +41,8 @@ async page => {
             const format = node.widgets.find(w => w.name === "format").value;
             assert(Boolean(node.widgets.find(w => w.name === "png_compression").hidden) === (format !== "PNG"), "Reload visibility");
             assert(node.widgets.find(w => w.name === "output_folder").value === "save-image-validation", "Reload folder");
+            assert(node.widgets.find(w => w.name === "save_prompt").value === true, "Reload save_prompt");
+            assert(node.widgets.find(w => w.name === "prompt_text").value === "A café in soft natural light.\nDetailed textures.", "Reload prompt text");
         }
         const prompt = await app.graphToPrompt();
         const queue = await (await fetch("/queue")).json();

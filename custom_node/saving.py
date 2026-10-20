@@ -29,9 +29,9 @@ def destination(root, folder, prefix):
     return target, "" if target == root else target.relative_to(root).as_posix()
 
 
-def reserve(target, prefix, extension, sidecar):
+def reserve(target, prefix, extension, sidecar, text_sidecar=False):
     # Scan once, then use exclusive creation to arbitrate concurrent executions.
-    pattern = re.compile(re.escape(prefix) + r"_(\d+)\.(?:png|jpg|json)$")
+    pattern = re.compile(re.escape(prefix) + r"_(\d+)\.(?:png|jpg|json|txt)$")
     counter = 1
     for entry in target.iterdir():
         match = pattern.fullmatch(entry.name)
@@ -39,9 +39,14 @@ def reserve(target, prefix, extension, sidecar):
             counter = max(counter, int(match[1]) + 1)
     while True:
         path = target / f"{prefix}_{counter:05d}.{extension}"
+        candidates = [path]
+        if sidecar:
+            candidates.append(path.with_suffix(".json"))
+        if text_sidecar:
+            candidates.append(path.with_suffix(".txt"))
         owned = []
         try:
-            for candidate in ([path, path.with_suffix(".json")] if sidecar else [path]):
+            for candidate in candidates:
                 fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
                 os.close(fd)
                 owned.append(candidate)
@@ -68,9 +73,11 @@ def atomic_write(path, writer):
         Path(name).unlink(missing_ok=True)
 
 
-def save_image(image, target, prefix, image_format, png_compression, jpeg_quality, metadata):
+def save_image(image, target, prefix, image_format, png_compression, jpeg_quality, metadata,
+               prompt_text=None):
     sidecar = image_format == "JPEG" and metadata is not None
-    path, owned = reserve(target, prefix, "png" if image_format == "PNG" else "jpg", sidecar)
+    path, owned = reserve(target, prefix, "png" if image_format == "PNG" else "jpg",
+                          sidecar, text_sidecar=prompt_text is not None)
     try:
         if image_format == "PNG":
             pnginfo = PngImagePlugin.PngInfo()
@@ -90,6 +97,9 @@ def save_image(image, target, prefix, image_format, png_compression, jpeg_qualit
             if sidecar:
                 payload = json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8")
                 atomic_write(path.with_suffix(".json"), lambda stream: stream.write(payload))
+        if prompt_text is not None:
+            payload = prompt_text.encode("utf-8")
+            atomic_write(path.with_suffix(".txt"), lambda stream: stream.write(payload))
     except BaseException:
         for candidate in owned:
             candidate.unlink(missing_ok=True)
