@@ -146,7 +146,7 @@ class SaveTests(unittest.TestCase):
         text = "  A café at sunset.\nNegative: blurry\n日本語 🖼️\r\n"
         for fmt in ("PNG", "JPEG"):
             result = self.save(images=self.images.repeat(2, 1, 1, 1), format=fmt,
-                               save_prompt=True, prompt_text=text)
+                               prompt_text=text)
             for name in result["result"][0]:
                 path = Path(name)
                 self.assertEqual(path.with_suffix(".txt").read_bytes(), text.encode("utf-8"))
@@ -154,20 +154,24 @@ class SaveTests(unittest.TestCase):
                     image.load()
                 self.assertEqual(path.with_suffix(".json").exists(), fmt == "JPEG")
 
-    def test_prompt_default_off_and_explicit_export_without_metadata(self):
-        for kwargs in ({}, {"save_prompt": False, "prompt_text": "Do not export"}):
+    def test_unconnected_prompt_skips_text_and_connected_export_without_metadata(self):
+        for kwargs in ({}, {"prompt_text": None}):
             path = Path(self.save(**kwargs)["result"][0][0])
             self.assertFalse(path.with_suffix(".txt").exists())
         with patch.object(nodes.args, "disable_metadata", True):
             path = Path(self.save(format="JPEG", save_metadata=False,
-                                 save_prompt=True, prompt_text="Explicit prompt")["result"][0][0])
+                                 prompt_text="Explicit prompt")["result"][0][0])
         self.assertFalse(path.with_suffix(".json").exists())
         self.assertEqual(path.with_suffix(".txt").read_text(), "Explicit prompt")
 
-    def test_empty_prompt_rejected_before_writing(self):
-        for text in ("", " \n\t", None):
-            with self.assertRaisesRegex(ValueError, "prompt_text"):
-                self.save(save_prompt=True, prompt_text=text)
+    def test_connected_empty_text_is_preserved(self):
+        for text in ("", " \n\t"):
+            path = Path(self.save(prompt_text=text)["result"][0][0])
+            self.assertEqual(path.with_suffix(".txt").read_bytes(), text.encode("utf-8"))
+
+    def test_invalid_prompt_type_rejected_before_writing(self):
+        with self.assertRaisesRegex(ValueError, "prompt_text"):
+            self.save(prompt_text=123)
         self.assertEqual(list(self.root.iterdir()), [])
 
     def test_concurrent_prompt_pairs_and_existing_text_are_preserved(self):
@@ -175,7 +179,7 @@ class SaveTests(unittest.TestCase):
         orphan.write_text("Existing text")
         def save_pair(index):
             text = f"Prompt {index}"
-            path = Path(self.save(format="JPEG", save_prompt=True, prompt_text=text)["result"][0][0])
+            path = Path(self.save(format="JPEG", prompt_text=text)["result"][0][0])
             return path, text
         with ThreadPoolExecutor(max_workers=6) as pool:
             pairs = list(pool.map(save_pair, range(12)))
@@ -195,7 +199,7 @@ class SaveTests(unittest.TestCase):
         for fmt in ("PNG", "JPEG"):
             with patch.object(saving, "atomic_write", side_effect=fail_text):
                 with self.assertRaisesRegex(OSError, "Text write failed"):
-                    self.save(format=fmt, save_prompt=True, prompt_text="A portrait")
+                    self.save(format=fmt, prompt_text="A portrait")
             self.assertEqual(list(self.root.iterdir()), [])
 
 

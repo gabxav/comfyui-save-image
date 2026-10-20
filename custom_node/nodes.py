@@ -18,7 +18,7 @@ class XavierSaveImage:
     DESCRIPTION = (
         "Save an IMAGE batch as PNG or JPEG, with compression, prefix and output subfolder. "
         "PNG preserves alpha; JPEG composites alpha on white. Files are never overwritten. "
-        "Optionally save prompt_text in a UTF-8 .txt file with the same image filename stem. "
+        "Connect prompt_text to save a matching UTF-8 .txt file; leave it unconnected to skip text export. "
         "Returns one absolute server path per image and previews the saved files."
     )
 
@@ -40,17 +40,15 @@ class XavierSaveImage:
                     "tooltip": "Embed prompt/workflow in PNG, or save a companion JSON for JPEG. Respects --disable-metadata."}),
             },
             "optional": {
-                "save_prompt": ("BOOLEAN", {"default": False,
-                    "tooltip": "Save prompt_text as a UTF-8 .txt file next to each image, using the same filename stem."}),
-                "prompt_text": ("STRING", {"default": "", "multiline": True,
-                    "tooltip": "Type or connect the prompt text to save. Required when save_prompt is enabled. The same text is used for each image in this batch."}),
+                "prompt_text": ("STRING", {"forceInput": True,
+                    "tooltip": "Connect prompt text to save a matching UTF-8 .txt file for each image. Leave unconnected to skip text export. The same text is used for this batch."}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
 
     def save(self, images, format="PNG", filename_prefix="ComfyUI", output_folder="",
              png_compression=6, jpeg_quality=90, save_metadata=True,
-             prompt=None, extra_pnginfo=None, save_prompt=False, prompt_text=""):
+             prompt=None, extra_pnginfo=None, prompt_text=None):
         if format not in ("PNG", "JPEG"):
             raise ValueError("format must be PNG or JPEG.")
         if not 0 <= png_compression <= 9 or not 1 <= jpeg_quality <= 100:
@@ -59,8 +57,8 @@ class XavierSaveImage:
             raise ValueError("Expected IMAGE shaped [batch, height, width, 1/3/4].")
         if min(images.shape[:3]) < 1:
             raise ValueError("IMAGE batch and dimensions must be non-empty.")
-        if save_prompt and (not isinstance(prompt_text, str) or not prompt_text.strip()):
-            raise ValueError("prompt_text must not be empty when save_prompt is enabled.")
+        if prompt_text is not None and not isinstance(prompt_text, str):
+            raise ValueError("prompt_text must be a STRING.")
         target, subfolder = destination(folder_paths.get_output_directory(), output_folder, filename_prefix)
         metadata = None
         if save_metadata and not args.disable_metadata:
@@ -77,7 +75,7 @@ class XavierSaveImage:
                 pixels = pixels[..., 0]
             path = save_image(Image.fromarray(pixels), target, filename_prefix,
                               format, png_compression, jpeg_quality, metadata,
-                              prompt_text=prompt_text if save_prompt else None)
+                              prompt_text=prompt_text)
             paths.append(str(path))
             previews.append({"filename": path.name, "subfolder": subfolder, "type": "output"})
         return {"ui": {"images": previews}, "result": (paths,)}

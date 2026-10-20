@@ -16,8 +16,7 @@ Descriptions, tooltips and error messages are in English.
 | png_compression | 6 | 0–9; lossless PNG compression |
 | jpeg_quality | 90 | 1–100; lossy JPEG quality |
 | save_metadata | true | PNG embedded metadata or JPEG companion JSON |
-| save_prompt | false | Save the supplied prompt in a .txt file beside each image |
-| prompt_text | empty | Multiline prompt text; can also be connected from a STRING output |
+| prompt_text | unconnected | Optional STRING input socket; connect to save a matching .txt file |
 
 Only the selected format's compression control is shown. When format is supplied
 by a connected input, both controls remain available.
@@ -38,21 +37,25 @@ Metadata preserves ComfyUI prompt and workflow, respecting `--disable-metadata`.
 JPEG workflow recovery uses the companion JSON's `workflow` object; JPEG itself
 does not contain an embedded workflow.
 
-Enable **save_prompt** and type or connect **prompt_text** to save a plain-text
-prompt alongside the image. For example, `portrait_00001.png` is paired with
-`portrait_00001.txt`; JPEG uses the same convention. Text is saved exactly as
-supplied in UTF-8, preserving whitespace, line breaks and Unicode characters.
-An empty or whitespace-only prompt is rejected before saving images.
+Connect a STRING output to **prompt_text** to save a plain-text prompt alongside
+each image. This is an optional input socket only: there is no text widget or
+toggle on the save node. Leave it unconnected to save images without TXT files.
+For example, `portrait_00001.png` is paired with `portrait_00001.txt`; JPEG uses
+the same convention. Text is saved exactly as supplied in UTF-8, including
+whitespace, line breaks, Unicode characters and empty connected strings.
 
-Every image in one IMAGE batch receives the same supplied text. For different
+Every image in one IMAGE batch receives the same connected text. For different
 prompts per image, pass each matching image and prompt through separate node
 executions. The node does not guess or extract a positive prompt from the workflow.
-This explicit text export is independent of `save_metadata` and
-`--disable-metadata`. TXT, image and optional JSON filenames are reserved together;
-existing companions are never overwritten. If writing a companion fails, files
-created for that image are cleaned up and the error is reported.
-Existing workflows keep their previous behavior because **save_prompt** defaults
-to false.
+Text export is independent of `save_metadata` and `--disable-metadata`.
+TXT, image and optional JSON filenames are reserved together; existing companions
+are never overwritten. If writing a companion fails, files created for that image
+are cleaned up and the error is reported. Disconnecting the input does not delete
+TXT files from previous executions.
+
+When opening a workflow saved with the earlier text-widget version, connect its
+prompt source to the new **prompt_text** socket. The old text widget and
+`save_prompt` toggle are no longer used.
 
 The `file_paths` STRING list output contains one absolute **server** path per
 image. Saved images are also returned through ComfyUI's standard preview/history
@@ -79,8 +82,8 @@ models and saves two PNGs, two JPEGs and their companion JSON files inside
 `output/save-image-example/` (relative to your configured output directory).
 Connect any IMAGE-producing node in place of Empty Image to save your own images.
 
-`examples/save_png_jpeg_with_prompt.json` enables text export on both save nodes
-and includes an editable sample prompt. It also produces one matching .txt file
+`examples/save_png_jpeg_with_prompt.json` connects a Text (Multiline) node
+to both save nodes. It also produces one matching .txt file
 per image. Empty Image is only a test image source; the sample text does not
 generate an image.
 
@@ -94,8 +97,8 @@ python -m unittest discover -s tests -v
 
 Tests cover encoding, alpha, metadata, batch behavior, filename collisions,
 concurrent saves, directory restrictions, failed writes and tensor preservation.
-Prompt tests verify exact UTF-8 text, batch pairing, default-off compatibility,
-empty prompt validation, concurrent companions and cleanup after text-write failure.
+Prompt tests verify exact UTF-8 text, batch pairing, unconnected input behavior,
+empty connected text, concurrent companions and cleanup after text-write failure.
 The tests discover the ComfyUI root when installed under `custom_nodes`.
 For a standalone checkout, add your ComfyUI root to `PYTHONPATH`.
 
