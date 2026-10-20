@@ -3,6 +3,8 @@
 ComfyUI output node for saving IMAGE batches as compressed PNG or JPEG.
 Search for **Save Image (XavierLAB)** or **xavierlab**.
 
+![Save Image nodes in PNG and JPEG modes, with the optional prompt_text input connected](docs/preview.png)
+
 Works with a standard ComfyUI installation and its configured output directory.
 No account, API key, external service, model or XavierLAB infrastructure is required.
 Descriptions, tooltips and error messages are in English.
